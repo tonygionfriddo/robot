@@ -10,6 +10,12 @@ __pycache__/
 *.idea/**
 /robot/.idea/**
 /robot/.idea
+misc.xml
+modules.xml
+profiles_settings.xml
+Project_Default.xml
+robot.iml
+vcs.xml
 
 # C extensions
 *.so
