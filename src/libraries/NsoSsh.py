@@ -1,60 +1,37 @@
 import paramiko
-import os
-import datetime
 from typing import Tuple
 
 
-class NsoSshConnection:
+class NsoSsh(object):
     def __init__(self):
         self.nso_ip = None
         self.nso_port = None
         self.username = None
         self.password = None
         self.ssh_client = None
-        self.result_path = None
+        self.result_path = 'src/results'
+
+    def setup_all(self, un, pw, ip, port):
+        """
+        setup credentials, connection, and connect to nso
+        """
+        self.setup_credentials(un=un, pw=pw)
+        self.setup_connection(ip=ip, port=port)
+        self.connect()
 
     def setup_credentials(self, un, pw) -> None:
+        """
+        assign user credentials to the NsoSsh Obj
+        """
         self.username = un
         self.password = pw
 
     def setup_connection(self, ip, port) -> None:
+        """
+        assign connection details to the NsoSsh Obj
+        """
         self.nso_ip = ip
         self.nso_port = port
-
-    def setup_results_path(self) -> Tuple[int, dict]:
-        """
-        setup path for test results
-        """
-        print('creating test results directory...')
-        todays_datetime = datetime.date.today()
-        test_time = datetime.datetime.now()
-        result_path = '../test_results/' \
-                      f'{todays_datetime.month}-{todays_datetime.day}-{todays_datetime.year}_' \
-                      f'{test_time.hour}:{test_time.minute}:{test_time.second}'
-
-        try:
-            os.mkdir('../test_results')
-        except FileExistsError as e:
-            if e.errno != 17:
-                print(f'failed to create test result directory: {result_path}')
-                return 1, {'message': str(e)}
-        except Exception as e:
-            print(f'failed to create test result directory: {result_path}')
-            return 1, {'message': str(e)}
-
-        try:
-            os.mkdir(f'../test_results/{result_path}')
-        except FileExistsError as e:
-            if e.errno != 17:
-                print(f'failed to create test result directory: {result_path}')
-                return 1, {'message': str(e)}
-        except Exception as e:
-            print(f'failed to create test result directory: {result_path}')
-            return 1, {'message': str(e)}
-        print('test result directory created...')
-        self.result_path = result_path
-        print(f'result_path: {result_path}')
-        return 0, {'result': result_path}
 
     def connect(self) -> Tuple[int, dict]:
         """
@@ -77,16 +54,17 @@ class NsoSshConnection:
         return 0, {'result': 'success'}
 
     def get_file_list(self, path) -> Tuple[int, dict]:
+        """
+        lookup the passed in path and perform an ls
+        """
         try:
             # get file list
             _stdin, stdout, _stderr = self.ssh_client.exec_command(f'cd {path} && ls')
             output = [x.rstrip() for x in stdout.readlines()]
-            print('existing nso log files:')
-            print(output)
         except Exception as e:
             print(f'failed to execute command via ssh client: cd {path} && ls')
             return 1, {'message': str(e)}
-        print('list files success...')
+        print(f'files in {path}: {output}')
         return 0, {'result': output}
 
     def delete_file(self, path, file_name) -> Tuple[int, dict]:
@@ -105,10 +83,10 @@ class NsoSshConnection:
                 print(msg)
                 return 1, {'message': msg}
         except Exception as e:
-            msg = f'failed to remove file from server: {path}{file_name} {e}'
+            msg = f'failed to delete file from server: {path}{file_name} {e}'
             print(msg)
             return 1, {'message': msg}
-        print(f'delete file success: {path}{file_name}...')
+        print(f'file deleted: {path}{file_name}...')
         return 0, {'result': 'success'}
 
     def transfer_files(self, remote_path, file, desc=None) -> Tuple[int, dict]:
@@ -137,6 +115,12 @@ class NsoSshConnection:
         # cleanup connections
         self.ssh_client.close()
 
+    def get_files(self, filenames, path, desc=None):
+        return_code, result = self.get_file_list(path=path)
+        for _file in filenames:
+            if _file in result['result']:
+                self.transfer_files(remote_path=path, file=_file, desc=desc)
+
 
 if __name__ == '__main__':
-    nso = NsoSshConnection()
+    nso = NsoSsh()
