@@ -9,6 +9,7 @@ __pycache__/
 .idea/**
 *.idea/**
 /robot/.idea/**
+/robot/.idea
 
 # C extensions
 *.so
