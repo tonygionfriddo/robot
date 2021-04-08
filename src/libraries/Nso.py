@@ -6,18 +6,27 @@ import xmltodict
 from jinja2 import Template
 
 
-class NsoLibs:
+class Nso:
     def __init__(self, hostname, un, pw):
         self.hostname = hostname
         self.un = un
         self.pw = pw
+        self.device_list = None
+
+    def validate_device_exists(self, device_name):
+        return_code, msg = self.get_device_list()
+        if return_code == 1:
+            raise AssertionError(f'failed to get_device_list: {msg}')
+
+        if device_name not in self.device_list:
+            raise AssertionError(f'{device_name} not found in nso instance {self.hostname}')
+
+        print(f'{device_name} passed verification')
 
     def get_device_list(self):
         """
         return a list of devices from the nso cdb
-        :return:
         """
-        error = {}
         device_list = []
         headers = {"Accept": "application/vnd.yang.collection+json"}
         r = requests.get(
@@ -25,18 +34,18 @@ class NsoLibs:
             auth=HTTPBasicAuth(self.un, self.pw),
             headers=headers
         )
-        print(r.status_code)
-        print(r.text)
         if r.status_code == 200:
             response = json.loads(r.text)
             if len(response['collection']['tailf-ncs:device']) > 0:
                 for _device in response['collection']['tailf-ncs:device']:
                     device_list.append(_device['name'])
         else:
-            error = {
-                'message': 'failed to retrieve device list'
-            }
-        return device_list, error
+            print(f'failed status code: {r.status_code}')
+            print(f'failed response: {r.text}')
+            return 1, {'status_code': r.status_code, 'response': r.text}
+        self.device_list = device_list
+        print(f'device list: {self.device_list}')
+        return 0, {}
 
     def check_api_running(self):
         headers = {"Accept": "application/vnd.yang.datastore+json"}
@@ -55,14 +64,20 @@ class NsoLibs:
             auth=HTTPBasicAuth(self.un, self.pw),
             headers=headers
         )
-        print(r.status_code)
-        print(r.text)
-        if json.loads(r.text):
-            response = json.loads(r.text)
-            print(type(response))
-            return 1, {'message': 'config diff found', 'config-diff': response['tailf-ncs:output']['diff']}
-        else:
-            return 0, {}
+
+        if r.status_code != 200:
+            print(f'compare config request failed: {r.status_code}')
+            print(f'response: {r.text}')
+            raise AssertionError('compare config failed')
+
+        response = json.loads(r.text)
+        if response:
+            print('config diff detected!')
+            print(f"{response['tailf-ncs:output']['diff']}")
+            raise AssertionError('config diff detected, device is not in sync')
+
+        print('no config diff detected, device is in sync')
+        return 0, {}
 
     def check_sync(self, device):
         headers = {"Accept": "application/vnd.yang.data+json"}
